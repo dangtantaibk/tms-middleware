@@ -33,7 +33,7 @@ import { AppConfigService } from './config.service';
         REDIS_PASSWORD: Joi.string().allow('').optional(),
         REDIS_TTL: Joi.number().default(3600),
         MICROSERVICE_TCP_HOST: Joi.string().default('localhost'),
-        MICROSERVICE_TCP_PORT: Joi.number().default(3001),
+        MICROSERVICE_TCP_PORT: Joi.number().default(3003),
       }),
     }),
   ],

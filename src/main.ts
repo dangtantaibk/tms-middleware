@@ -37,13 +37,13 @@ async function bootstrap() {
     transport: Transport.TCP,
     options: {
       host: process.env.MICROSERVICE_TCP_HOST || '0.0.0.0',
-      port: parseInt(process.env.MICROSERVICE_TCP_PORT) || 3001,
+      port: parseInt(process.env.MICROSERVICE_TCP_PORT) || 3003,
     },
   });
 
   // Start all microservices
   await app.startAllMicroservices();
-  logger.log(`🔌 TCP Microservice running on ${process.env.MICROSERVICE_TCP_HOST || '0.0.0.0'}:${process.env.MICROSERVICE_TCP_PORT || 3001}`);
+  logger.log(`🔌 TCP Microservice running on ${process.env.MICROSERVICE_TCP_HOST || '0.0.0.0'}:${process.env.MICROSERVICE_TCP_PORT || 3003}`);
 
   // Start HTTP server
   const port = configService.port;

@@ -127,7 +127,7 @@ GET /api/health/detailed
 ### Login and save token
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:3500/api/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:3020/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@example.com","password":"password123"}' \
   | jq -r '.accessToken')
@@ -138,7 +138,7 @@ echo $TOKEN
 ### Make authenticated request
 
 ```bash
-curl -X GET http://localhost:3500/api/users \
+curl -X GET http://localhost:3020/api/users \
   -H "Authorization: Bearer $TOKEN"
 ```
 

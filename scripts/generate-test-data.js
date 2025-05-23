@@ -13,7 +13,7 @@ const jwt = require('jsonwebtoken');
 // Load environment variables
 dotenv.config();
 
-const API_URL = `http://localhost:${process.env.PORT || 3500}${process.env.API_PREFIX || '/api'}`;
+const API_URL = `http://localhost:${process.env.PORT || 3020}${process.env.API_PREFIX || '/api'}`;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-middleware-secret';
 
 // Admin token for authorization

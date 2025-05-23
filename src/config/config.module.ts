@@ -19,7 +19,7 @@ import { AppConfigService } from './config.service';
         NODE_ENV: Joi.string()
           .valid('development', 'production', 'test')
           .default('development'),
-        PORT: Joi.number().default(3500),
+        PORT: Joi.number().default(3020),
         API_PREFIX: Joi.string().default('/api'),
         DATABASE_HOST: Joi.string().default('localhost'),
         DATABASE_PORT: Joi.number().default(5432),
@@ -32,9 +32,8 @@ import { AppConfigService } from './config.service';
         REDIS_PORT: Joi.number().default(6379),
         REDIS_PASSWORD: Joi.string().allow('').optional(),
         REDIS_TTL: Joi.number().default(3600),
-        TMS_BACKEND_URL: Joi.string().default('http://localhost:3000'),
-        TCP_HOST: Joi.string().default('localhost'),
-        TCP_PORT: Joi.number().default(3001),
+        MICROSERVICE_TCP_HOST: Joi.string().default('localhost'),
+        MICROSERVICE_TCP_PORT: Joi.number().default(3001),
       }),
     }),
   ],

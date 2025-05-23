@@ -86,7 +86,7 @@ Create a `.env` file in the root directory with the following variables:
 
 ```
 # App
-PORT=3500
+PORT=3020
 NODE_ENV=development
 API_PREFIX=/api
 
@@ -106,9 +106,6 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=
 REDIS_TTL=3600
-
-# TMS Backend
-TMS_BACKEND_URL=http://localhost:3000
 ```
 
 ## API Documentation

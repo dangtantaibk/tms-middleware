@@ -6,6 +6,7 @@ import { Order } from './entities/order.entity';
 import { HttpClientModule } from '@infrastructure/http/http-client.module';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from '@modules/auth/auth.module';
+import { OrderTcpController } from './order.tcp.controller';
 
 @Module({
   imports: [
@@ -18,7 +19,10 @@ import { AuthModule } from '@modules/auth/auth.module';
     }),
     HttpClientModule,
   ],
-  controllers: [OrderController],
+  controllers: [
+    OrderController,
+    OrderTcpController,
+  ],
   providers: [OrderService],
   exports: [OrderService],
 })

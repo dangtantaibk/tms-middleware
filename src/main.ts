@@ -6,6 +6,7 @@ import { AppConfigService } from './config/config.service';
 import * as compression from 'compression';
 import helmet from 'helmet';
 import { Logger } from '@nestjs/common';
+import { AllExceptionsFilter } from '@shared/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -31,6 +32,15 @@ async function bootstrap() {
   // Security middlewares
   app.use(helmet());
   app.use(compression());
+  
+  if (process.env.NODE_ENV === 'production') {
+    app.useLogger(['log', 'warn', 'error']);
+  } else {
+    app.useLogger(['log', 'error', 'warn', 'debug', 'verbose']); 
+  }
+
+  // Global exception filter để log errors
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Create TCP Microservice
   const microservice = app.connectMicroservice<MicroserviceOptions>({

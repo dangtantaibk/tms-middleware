@@ -1,10 +1,12 @@
-import { Controller } from '@nestjs/common';
+import { Controller, UseInterceptors } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { RoleService } from './role.service';
 import { CreateRoleDto, UpdateRoleDto } from '@shared/dto/role.dto';
 import { Role } from './entities/role.entity';
+import { LoggingInterceptor } from '@shared/interceptors/logging.interceptor';
 
 @Controller()
+@UseInterceptors(LoggingInterceptor)
 export class RoleTcpController {
   constructor(private readonly roleService: RoleService) {}
 

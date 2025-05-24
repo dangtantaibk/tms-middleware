@@ -3,8 +3,11 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import { UserService } from './user.service';
 import { CreateUserDto, UpdateUserDto } from '@shared/dto/user.dto';
 import { User } from './entities/user.entity';
+import { LoggingInterceptor } from '@shared/interceptors/logging.interceptor';
+import { UseInterceptors } from '@nestjs/common';
 
 @Controller()
+@UseInterceptors(LoggingInterceptor)
 export class UserTcpController {
   constructor(private readonly userService: UserService) {}
 

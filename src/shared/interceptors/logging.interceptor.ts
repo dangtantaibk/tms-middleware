@@ -13,7 +13,28 @@ import { throwError } from 'rxjs';
 export class LoggingInterceptor implements NestInterceptor {
   private readonly logger = new Logger(LoggingInterceptor.name);
 
+  constructor() {
+    this.logger.log('🚀 LoggingInterceptor initialized');
+  }
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    
+    const contextType = context.getType();
+
+    // Chỉ xử lý HTTP requests
+    if (contextType === 'http') {
+      return this.handleHttpRequest(context, next);
+    } 
+    // Xử lý TCP/RPC requests
+    else if (contextType === 'rpc') {
+      return this.handleRpcRequest(context, next);
+    }
+    
+    // Fallback cho các context types khác
+    return next.handle();
+  }
+
+  private handleHttpRequest(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
     const response = context.switchToHttp().getResponse();
     const { method, url, body, query, params, ip } = request;
@@ -24,14 +45,12 @@ export class LoggingInterceptor implements NestInterceptor {
     const startTime = Date.now();
     const isProduction = process.env.NODE_ENV === 'production';
 
-    // LOG: Request started
+    // LOG: HTTP Request started
     if (isProduction) {
-      // Production: 
       this.logger.log(
         `[${correlationId}] ${method} ${url} - User: ${userId} - IP: ${ip}`
       );
     } else {
-      // Development: more detailed logging
       this.logger.log(
         `📥 [${correlationId}] ${method} ${url} - User: ${userId} - IP: ${ip} - User-Agent: ${userAgent}`
       );
@@ -56,7 +75,7 @@ export class LoggingInterceptor implements NestInterceptor {
         const duration = Date.now() - startTime;
         const statusCode = response.statusCode;
 
-        // LOG: Request completed successfully
+        // LOG: HTTP Request completed successfully
         if (isProduction) {
           this.logger.log(
             `[${correlationId}] ${method} ${url} - ${statusCode} - ${duration}ms - User: ${userId}`
@@ -67,21 +86,21 @@ export class LoggingInterceptor implements NestInterceptor {
           );
           
           // Log response data chỉ trong development
-          if (data) {
+          if (data && process.env.NODE_ENV === 'development') {
             const sanitizedData = this.sanitizeData(data);
             this.logger.debug(`Response: ${JSON.stringify(sanitizedData)}`);
           }
         }
 
-        // WARN: Slow requests (cho cả production và development)
+        // WARN: Slow requests
         if (duration > 5000) {
           this.logger.warn(
             `[${correlationId}] SLOW REQUEST - ${method} ${url} - ${duration}ms - User: ${userId}`
           );
         }
 
-        // WARN: Large response size (chỉ warning, không log data)
-        if (data && JSON.stringify(data).length > 1000000) { // > 1MB
+        // WARN: Large response size
+        if (data && JSON.stringify(data).length > 1000000) {
           this.logger.warn(
             `[${correlationId}] LARGE RESPONSE - ${method} ${url} - Size: ${JSON.stringify(data).length} bytes - User: ${userId}`
           );
@@ -91,7 +110,7 @@ export class LoggingInterceptor implements NestInterceptor {
         const duration = Date.now() - startTime;
         const statusCode = error.status || 500;
 
-        // ERROR: Request failed
+        // ERROR: HTTP Request failed
         if (isProduction) {
           this.logger.error(
             `[${correlationId}] ${method} ${url} - ${statusCode} - ${duration}ms - User: ${userId} - Error: ${error.message}`,
@@ -108,6 +127,54 @@ export class LoggingInterceptor implements NestInterceptor {
       }),
     );
   }
+
+  private handleRpcRequest(context: ExecutionContext, next: CallHandler): Observable<any> {
+  const rpcContext = context.switchToRpc();
+  const data = rpcContext.getData();
+  const pattern = context.getHandler().name;
+  const correlationId = this.generateCorrelationId();
+
+  const startTime = Date.now();
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  const dataSummary = this.createDataSummary(data);
+
+  return next.handle().pipe(
+    tap((result) => {
+      const duration = Date.now() - startTime;
+      const resultSummary = this.createDataSummary(result);
+      
+      // LOG: RPC Response - compact format
+      this.logger.log(`📤 [${correlationId}] ${pattern} ${dataSummary} - ${duration}ms ${resultSummary}`);
+    }),
+    catchError((error) => {
+      const duration = Date.now() - startTime;
+      this.logger.error(`❌ [${correlationId}] ${pattern} ${dataSummary} - ${duration}ms | Error: ${error.message}`);
+      return throwError(() => error);
+    }),
+  );
+}
+
+private createDataSummary(data: any): string {
+  if (!data) return '';
+  
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  // if (isProduction) {
+  //   if (typeof data === 'string') return `| String(${data.length})`;
+  //   if (Array.isArray(data)) return `| Array(${data.length})`;
+  //   if (typeof data === 'object') return `| Object(${Object.keys(data).length} keys)`;
+  //   return `| ${typeof data}`;
+  // } else {
+    const sanitizedData = this.sanitizeData(data);
+    const jsonString = JSON.stringify(sanitizedData);
+    
+    if (jsonString.length > 200) {
+      return `| ${jsonString.substring(0, 200)}...`;
+    }
+    return `| ${jsonString}`;
+  // }
+}
 
   private sanitizeData(data: any): any {
     if (!data || typeof data !== 'object') {

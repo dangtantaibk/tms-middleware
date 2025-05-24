@@ -7,6 +7,7 @@ import * as compression from 'compression';
 import helmet from 'helmet';
 import { Logger } from '@nestjs/common';
 import { AllExceptionsFilter } from '@shared/filters/all-exceptions.filter';
+import { LoggingInterceptor } from '@shared/interceptors/logging.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -41,6 +42,7 @@ async function bootstrap() {
 
   // Global exception filter để log errors
   app.useGlobalFilters(new AllExceptionsFilter());
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // Create TCP Microservice
   const microservice = app.connectMicroservice<MicroserviceOptions>({

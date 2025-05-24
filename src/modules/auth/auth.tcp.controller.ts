@@ -2,8 +2,11 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
 import { LoginDto, RefreshTokenDto } from '@shared/dto/auth.dto';
+import { UseInterceptors } from '@nestjs/common';
+import { LoggingInterceptor } from '@shared/interceptors/logging.interceptor';
 
 @Controller()
+@UseInterceptors(LoggingInterceptor)
 export class AuthTcpController {
   constructor(private readonly authService: AuthService) {}
 

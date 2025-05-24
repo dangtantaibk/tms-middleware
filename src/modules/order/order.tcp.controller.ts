@@ -2,8 +2,11 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { OrderService } from './order.service';
 import { CreateOrderDto, UpdateOrderStatusDto, UpdatePaymentStatusDto } from '@shared/dto/order.dto';
+import { UseInterceptors } from '@nestjs/common';
+import { LoggingInterceptor } from '@shared/interceptors/logging.interceptor';
 
 @Controller()
+@UseInterceptors(LoggingInterceptor)
 export class OrderTcpController {
   constructor(private readonly orderService: OrderService) {}
 

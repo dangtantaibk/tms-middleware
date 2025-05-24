@@ -1,8 +1,11 @@
 import { Controller, Get } from '@nestjs/common';
 import { CacheService } from '@infrastructure/cache/cache.service';
 import { Public } from '@shared/decorators/auth.decorator';
+import { UseInterceptors } from '@nestjs/common';
+import { LoggingInterceptor } from '@shared/interceptors/logging.interceptor';
 
 @Controller('health')
+@UseInterceptors(LoggingInterceptor)
 export class HealthController {
   constructor(private readonly cacheService: CacheService) {}
 

@@ -145,11 +145,11 @@ export class LoggingInterceptor implements NestInterceptor {
       const resultSummary = this.createDataSummary(result);
       
       // LOG: RPC Response - compact format
-      this.logger.log(`📤 [${correlationId}] ${pattern} ${dataSummary} - ${duration}ms ${resultSummary}`);
+      this.logger.log(`📤 [${correlationId}] - ${duration}ms - ${pattern} ${dataSummary} ${resultSummary}`);
     }),
     catchError((error) => {
       const duration = Date.now() - startTime;
-      this.logger.error(`❌ [${correlationId}] ${pattern} ${dataSummary} - ${duration}ms | Error: ${error.message}`);
+      this.logger.error(`❌ [${correlationId}] - ${duration}ms - ${pattern} ${dataSummary} | Error: ${error.message}`);
       return throwError(() => error);
     }),
   );

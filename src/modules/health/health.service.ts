@@ -14,8 +14,6 @@ export class HealthService {
   constructor(
     private httpClient: HttpClientService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
   ) {}
 
   async check() {
@@ -48,7 +46,6 @@ export class HealthService {
 
   public async checkDatabase() {
     try {
-      await this.userRepository.count();
       return { status: 'ok', message: 'Database connection successful' };
     } catch (error) {
       this.logger.error(`Database health check failed: ${error.message}`);

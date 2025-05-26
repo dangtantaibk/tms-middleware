@@ -46,7 +46,7 @@ export class HealthService {
     return result;
   }
 
-  private async checkDatabase() {
+  public async checkDatabase() {
     try {
       await this.userRepository.count();
       return { status: 'ok', message: 'Database connection successful' };

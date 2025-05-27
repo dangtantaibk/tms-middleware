@@ -1,10 +1,12 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Role } from './entities/role.entity';
 import { CreateRoleDto, UpdateRoleDto } from '@shared/dto/role.dto';
 import { CacheService } from '@infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@common/constants/cache.constants';
+import { createRpcException } from '@shared/utils/exception.utils';
+import { ERROR_CODES } from '@common/constants/error-codes.constants';
 
 @Injectable()
 export class RoleService {
@@ -21,7 +23,11 @@ export class RoleService {
     });
 
     if (existingRole) {
-      throw new ConflictException(`Role with name '${createRoleDto.name}' already exists`);
+      throw createRpcException(
+        ERROR_CODES.ALREADY_EXISTS,
+        `Role with name '${createRoleDto.name}' already exists`,
+        { name: createRoleDto.name }
+      );
     }
 
     const role = this.roleRepository.create(createRoleDto);
@@ -67,7 +73,11 @@ export class RoleService {
     });
 
     if (!role) {
-      throw new NotFoundException(`Role with ID ${id} not found`);
+      throw createRpcException(
+        ERROR_CODES.NOT_FOUND,
+        `Role with ID ${id} not found`,
+        { id }
+      );
     }
     
     // Cache the result
@@ -91,7 +101,11 @@ export class RoleService {
     });
 
     if (!role) {
-      throw new NotFoundException(`Role with name '${name}' not found`);
+      throw createRpcException(
+        ERROR_CODES.NOT_FOUND,
+        `Role with name '${name}' not found`,
+        { name }
+      );
     }
     
     // Cache the result
@@ -110,7 +124,11 @@ export class RoleService {
       });
 
       if (existingRole) {
-        throw new ConflictException(`Role with name '${updateRoleDto.name}' already exists`);
+        throw createRpcException(
+          ERROR_CODES.ALREADY_EXISTS,
+          `Role with name '${updateRoleDto.name}' already exists`,
+          { name: updateRoleDto.name }
+        );
       }
     }
 
@@ -128,13 +146,21 @@ export class RoleService {
     
     // Check if role has users assigned
     if (role.users && role.users.length > 0) {
-      throw new ConflictException(`Cannot delete role '${role.name}' because it has users assigned`);
+      throw createRpcException(
+        ERROR_CODES.CONFLICT,
+        `Cannot delete role '${role.name}' because it has users assigned`, 
+        { roleId: id, roleName: role.name }
+      );
     }
     
     // Check if this is a system role that cannot be deleted
     const systemRoles = ['admin', 'super-admin', 'system'];
     if (systemRoles.includes(role.name.toLowerCase())) {
-      throw new ConflictException(`Cannot delete system role '${role.name}'`);
+      throw createRpcException(
+        ERROR_CODES.CONFLICT,
+        `Cannot delete system role '${role.name}'`,
+        { roleId: id, roleName: role.name }
+      );
     }
     
     await this.roleRepository.delete(id);
@@ -152,7 +178,11 @@ export class RoleService {
     );
     
     if (validPermissions.length === 0) {
-      throw new ConflictException('No valid permissions provided');
+      throw createRpcException(
+        ERROR_CODES.BAD_REQUEST,
+        'No valid permissions provided',
+        { permissions }
+      );
     }
     
     // Merge permissions and remove duplicates
@@ -196,7 +226,11 @@ export class RoleService {
     });
 
     if (!role) {
-      throw new NotFoundException(`Role with ID ${roleId} not found`);
+      throw createRpcException(
+        ERROR_CODES.NOT_FOUND,
+        `Role with ID ${roleId} not found`,
+        { roleId }
+      );
     }
 
     // Cache the result

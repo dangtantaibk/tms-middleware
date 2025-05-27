@@ -1,8 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RoleService } from './role.service';
-import { RoleController } from './role.controller';
-import { RoleTcpController } from './role.tcp.controller';
+import { RoleTcpController } from './role.controller';
 import { Role } from './entities/role.entity';
 import { JwtModule } from '@nestjs/jwt';
 import { AppConfigService } from '@config/config.service';
@@ -19,7 +18,6 @@ import { AppConfigService } from '@config/config.service';
     }),
   ],
   controllers: [
-    RoleController,
     RoleTcpController,
   ],
   providers: [RoleService],

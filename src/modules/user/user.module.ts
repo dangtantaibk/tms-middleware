@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserService } from './user.service';
-import { UserController } from './user.controller';
-import { UserTcpController } from './user.tcp.controller';
+import { UserTcpController } from './user.controller';
 import { User } from './entities/user.entity';
 import { JwtModule } from '@nestjs/jwt';
 import { AppConfigService } from '@config/config.service';
+import { APP_FILTER } from '@nestjs/core';
+import { TcpExceptionFilter } from '@shared/filters/tcp-exceptions.filter';
 
 @Module({
   imports: [
@@ -19,10 +20,15 @@ import { AppConfigService } from '@config/config.service';
     }),
   ],
   controllers: [
-    UserController,
     UserTcpController,
   ],
-  providers: [UserService],
+  providers: [
+    UserService,
+    {
+      provide: APP_FILTER,
+      useClass: TcpExceptionFilter,
+    },
+  ],
   exports: [UserService],
 })
-export class UserModule {}
+export class UserModule { }

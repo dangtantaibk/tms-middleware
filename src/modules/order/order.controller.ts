@@ -1,70 +1,157 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  UseGuards,
-  UseInterceptors,
-} from '@nestjs/common';
+import { Controller, UseFilters, UseInterceptors } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
 import { OrderService } from './order.service';
 import { CreateOrderDto, UpdateOrderStatusDto, UpdatePaymentStatusDto } from '@shared/dto/order.dto';
-import { JwtAuthGuard } from '@shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@shared/guards/roles.guard';
-import { Roles } from '@shared/decorators/auth.decorator';
-import { UserRole } from '@common/enums/app.enums';
-import { CacheInterceptor } from '@shared/interceptors/cache.interceptor';
 import { LoggingInterceptor } from '@shared/interceptors/logging.interceptor';
+import { TcpExceptionFilter } from '@shared/filters/tcp-exceptions.filter';
+import { BaseResponse } from '@shared/interfaces/response.interface';
+import { Order } from './entities/order.entity';
+import { createRpcException } from '@shared/utils/exception.utils';
+import { ERROR_CODES } from '@common/constants/error-codes.constants';
 
-@Controller('orders')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@Controller()
 @UseInterceptors(LoggingInterceptor)
-export class OrderController {
+@UseFilters(TcpExceptionFilter)
+export class OrderTcpController {
   constructor(private readonly orderService: OrderService) {}
 
-  @Post()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.DISPATCHER, UserRole.CUSTOMER)
-  create(@Body() createOrderDto: CreateOrderDto) {
-    return this.orderService.create(createOrderDto);
+  @MessagePattern('order.create')
+  async create(@Payload() data: { createOrderDto: CreateOrderDto; userRole: string }): Promise<BaseResponse<Order>> {
+    const { createOrderDto, userRole } = data;
+    
+    // check user role
+    const allowedRoles = ['ADMIN', 'MANAGER', 'DISPATCHER', 'CUSTOMER'];
+    if (!allowedRoles.includes(userRole)) {
+      throw createRpcException(
+        ERROR_CODES.FORBIDDEN,
+        'You do not have permission to create orders',
+        { requiredRoles: allowedRoles, providedRole: userRole }
+      );
+    }
+
+    const order = await this.orderService.create(createOrderDto);
+    return {
+      success: true,
+      data: order,
+      error: null,
+    };
   }
 
-  @Get()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.DISPATCHER)
-  @UseInterceptors(CacheInterceptor)
-  findAll() {
-    return this.orderService.findAll();
+  @MessagePattern('order.findAll')
+  async findAll(@Payload() data: { userRole: string }): Promise<BaseResponse<Order[]>> {
+    const { userRole } = data;
+    
+    // check user role
+    const allowedRoles = ['ADMIN', 'MANAGER', 'DISPATCHER'];
+    if (!allowedRoles.includes(userRole)) {
+      throw createRpcException(
+        ERROR_CODES.FORBIDDEN,
+        'You do not have permission to view all orders',
+        { requiredRoles: allowedRoles, providedRole: userRole }
+      );
+    }
+
+    const orders = await this.orderService.findAll();
+    return {
+      success: true,
+      data: orders,
+      error: null,
+    };
   }
 
-  @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.DISPATCHER, UserRole.DRIVER, UserRole.CUSTOMER)
-  @UseInterceptors(CacheInterceptor)
-  findOne(@Param('id') id: string) {
-    return this.orderService.findOne(id);
+  @MessagePattern('order.findOne')
+  async findOne(@Payload() data: { id: string; userRole: string }): Promise<BaseResponse<Order>> {
+    const { id, userRole } = data;
+    
+    // check user role
+    const allowedRoles = ['ADMIN', 'MANAGER', 'DISPATCHER', 'DRIVER', 'CUSTOMER'];
+    if (!allowedRoles.includes(userRole)) {
+      throw createRpcException(
+        ERROR_CODES.FORBIDDEN,
+        'You do not have permission to view this order',
+        { requiredRoles: allowedRoles, providedRole: userRole }
+      );
+    }
+
+    const order = await this.orderService.findOne(id);
+    return {
+      success: true,
+      data: order,
+      error: null,
+    };
   }
 
-  @Patch(':id/status')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.DISPATCHER, UserRole.DRIVER)
-  updateStatus(
-    @Param('id') id: string,
-    @Body() updateOrderStatusDto: UpdateOrderStatusDto,
-  ) {
-    return this.orderService.updateStatus(id, updateOrderStatusDto);
+  @MessagePattern('order.updateStatus')
+  async updateStatus(@Payload() data: { 
+    id: string; 
+    updateOrderStatusDto: UpdateOrderStatusDto; 
+    userRole: string 
+  }): Promise<BaseResponse<Order>> {
+    const { id, updateOrderStatusDto, userRole } = data;
+    
+    // check user role
+    const allowedRoles = ['ADMIN', 'MANAGER', 'DISPATCHER', 'DRIVER'];
+    if (!allowedRoles.includes(userRole)) {
+      throw createRpcException(
+        ERROR_CODES.FORBIDDEN,
+        'You do not have permission to update order status',
+        { requiredRoles: allowedRoles, providedRole: userRole }
+      );
+    }
+
+    const order = await this.orderService.updateStatus(id, updateOrderStatusDto);
+    return {
+      success: true,
+      data: order,
+      error: null,
+    };
   }
 
-  @Patch(':id/payment')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  updatePaymentStatus(
-    @Param('id') id: string,
-    @Body() updatePaymentStatusDto: UpdatePaymentStatusDto,
-  ) {
-    return this.orderService.updatePaymentStatus(id, updatePaymentStatusDto);
+  @MessagePattern('order.updatePaymentStatus')
+  async updatePaymentStatus(@Payload() data: { 
+    id: string; 
+    updatePaymentStatusDto: UpdatePaymentStatusDto; 
+    userRole: string 
+  }): Promise<BaseResponse<Order>> {
+    const { id, updatePaymentStatusDto, userRole } = data;
+    
+    // check user role
+    const allowedRoles = ['ADMIN', 'MANAGER'];
+    if (!allowedRoles.includes(userRole)) {
+      throw createRpcException(
+        ERROR_CODES.FORBIDDEN,
+        'You do not have permission to update payment status',
+        { requiredRoles: allowedRoles, providedRole: userRole }
+      );
+    }
+
+    const order = await this.orderService.updatePaymentStatus(id, updatePaymentStatusDto);
+    return {
+      success: true,
+      data: order,
+      error: null,
+    };
   }
 
-  @Delete(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  remove(@Param('id') id: string) {
-    return this.orderService.remove(id);
+  @MessagePattern('order.remove')
+  async remove(@Payload() data: { id: string; userRole: string }): Promise<BaseResponse<{ message: string }>> {
+    const { id, userRole } = data;
+    
+    // check user role
+    const allowedRoles = ['ADMIN', 'MANAGER'];
+    if (!allowedRoles.includes(userRole)) {
+      throw createRpcException(
+        ERROR_CODES.FORBIDDEN,
+        'You do not have permission to delete orders',
+        { requiredRoles: allowedRoles, providedRole: userRole }
+      );
+    }
+
+    await this.orderService.remove(id);
+    return {
+      success: true,
+      data: { message: 'Order deleted successfully' },
+      error: null,
+    };
   }
 }

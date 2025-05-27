@@ -17,7 +17,7 @@ export class ErrorInterceptor implements NestInterceptor {
         // Return a standardized error response
         return throwError(() => new HttpException({
           status: HttpStatus.INTERNAL_SERVER_ERROR,
-          message: 'Internal server error',
+          message: 'Internal server error 3333',
           error: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong',
         }, HttpStatus.INTERNAL_SERVER_ERROR));
       }),

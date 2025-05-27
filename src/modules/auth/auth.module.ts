@@ -1,8 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
-import { AuthController } from './auth.controller';
-import { AuthTcpController } from './auth.tcp.controller';
+import { AuthTcpController } from './auth.controller';
 import { UserModule } from '@modules/user/user.module';
 import { AppConfigService } from '@config/config.service';
 
@@ -20,7 +19,6 @@ import { AppConfigService } from '@config/config.service';
     }),
   ],
   controllers: [
-    AuthController,
     AuthTcpController,
   ],
   providers: [AuthService],

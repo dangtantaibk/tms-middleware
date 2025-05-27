@@ -1,127 +1,137 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  UseGuards,
-  UseInterceptors,
-} from '@nestjs/common';
+import { Controller, UseFilters, UseInterceptors } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
 import { RoleService } from './role.service';
-import { 
-  CreateRoleDto, 
-  UpdateRoleDto, 
-  AddPermissionsDto, 
-  RemovePermissionsDto,
-  RoleResponseDto 
-} from '@shared/dto/role.dto';
-import { JwtAuthGuard } from '@shared/guards/jwt-auth.guard';
-import { RolesGuard } from '@shared/guards/roles.guard';
-import { Roles } from '@shared/decorators/auth.decorator';
-import { UserRole } from '@common/enums/app.enums';
-import { CacheInterceptor } from '@shared/interceptors/cache.interceptor';
+import { CreateRoleDto, UpdateRoleDto } from '@shared/dto/role.dto';
+import { Role } from './entities/role.entity';
 import { LoggingInterceptor } from '@shared/interceptors/logging.interceptor';
+import { TcpExceptionFilter } from '@shared/filters/tcp-exceptions.filter';
+import { BaseResponse } from '@shared/interfaces/response.interface';
 
-@Controller('roles')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@Controller()
 @UseInterceptors(LoggingInterceptor)
-export class RoleController {
+@UseFilters(TcpExceptionFilter)
+export class RoleTcpController {
   constructor(private readonly roleService: RoleService) {}
 
-  @Post()
-  @Roles(UserRole.ADMIN)
-  async create(@Body() createRoleDto: CreateRoleDto): Promise<RoleResponseDto> {
+  @MessagePattern('role.create')
+  async createRole(@Payload() createRoleDto: CreateRoleDto): Promise<BaseResponse<Role>> {
     const role = await this.roleService.create(createRoleDto);
     const { users, ...result } = role;
-    return result as RoleResponseDto;
+    return {
+      success: true,
+      data: result as Role,
+      error: null,
+    };
   }
 
-  @Get()
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  @UseInterceptors(CacheInterceptor)
-  async findAll(): Promise<RoleResponseDto[]> {
+  @MessagePattern('role.findAll')
+  async findAllRoles(): Promise<BaseResponse<Role[]>> {
     const roles = await this.roleService.findAll();
-    return roles.map(({ users, ...rest }) => rest) as RoleResponseDto[];
+    return {
+      success: true,
+      data: roles.map(({ users, ...rest }) => rest) as Role[],
+      error: null,
+    };
   }
 
-  @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  @UseInterceptors(CacheInterceptor)
-  async findOne(@Param('id') id: string): Promise<RoleResponseDto> {
+  @MessagePattern('role.findById')
+  async findRoleById(@Payload() id: string): Promise<BaseResponse<Role>> {
     const role = await this.roleService.findOne(id);
     const { users, ...result } = role;
-    return result as RoleResponseDto;
+    return {
+      success: true,
+      data: result as Role,
+      error: null,
+    };
   }
 
-  @Get('name/:name')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  @UseInterceptors(CacheInterceptor)
-  async findByName(@Param('name') name: string): Promise<RoleResponseDto> {
+  @MessagePattern('role.findByName')
+  async findRoleByName(@Payload() name: string): Promise<BaseResponse<Role>> {
     const role = await this.roleService.findByName(name);
     const { users, ...result } = role;
-    return result as RoleResponseDto;
-  }
-
-  @Patch(':id')
-  @Roles(UserRole.ADMIN)
-  async update(
-    @Param('id') id: string,
-    @Body() updateRoleDto: UpdateRoleDto,
-  ): Promise<RoleResponseDto> {
-    const role = await this.roleService.update(id, updateRoleDto);
-    const { users, ...result } = role;
-    return result as RoleResponseDto;
-  }
-
-  @Delete(':id')
-  @Roles(UserRole.ADMIN)
-  async remove(@Param('id') id: string): Promise<{ message: string }> {
-    await this.roleService.remove(id);
-    return { message: 'Role deleted successfully' };
-  }
-
-  @Post(':id/permissions')
-  @Roles(UserRole.ADMIN)
-  async addPermissions(
-    @Param('id') id: string,
-    @Body() addPermissionsDto: AddPermissionsDto,
-  ): Promise<RoleResponseDto> {
-    const role = await this.roleService.addPermissions(id, addPermissionsDto.permissions);
-    const { users, ...result } = role;
-    return result as RoleResponseDto;
-  }
-
-  @Delete(':id/permissions')
-  @Roles(UserRole.ADMIN)
-  async removePermissions(
-    @Param('id') id: string,
-    @Body() removePermissionsDto: RemovePermissionsDto,
-  ): Promise<RoleResponseDto> {
-    const role = await this.roleService.removePermissions(id, removePermissionsDto.permissions);
-    const { users, ...result } = role;
-    return result as RoleResponseDto;
-  }
-
-  @Get(':id/users')
-  @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  @UseInterceptors(CacheInterceptor)
-  async getUsersWithRole(@Param('id') id: string) {
-    const role = await this.roleService.getUsersWithRole(id);
     return {
-      role: {
-        id: role.id,
-        name: role.name,
-        description: role.description,
+      success: true,
+      data: result as Role,
+      error: null,
+    };
+  }
+
+  @MessagePattern('role.update')
+  async updateRole(@Payload() data: { id: string; updateRoleDto: UpdateRoleDto }): Promise<BaseResponse<Role>> {
+    const role = await this.roleService.update(data.id, data.updateRoleDto);
+    const { users, ...result } = role;
+    return {
+      success: true,
+      data: result as Role,
+      error: null,
+    };
+  }
+
+  @MessagePattern('role.delete')
+  async deleteRole(@Payload() id: string): Promise<BaseResponse<{ message: string }>> {
+    await this.roleService.remove(id);
+    return {
+      success: true,
+      data: { message: 'Role deleted successfully' },
+      error: null,
+    };
+  }
+
+  @MessagePattern('role.addPermissions')
+  async addPermissions(@Payload() data: { id: string; permissions: string[] }): Promise<BaseResponse<Role>> {
+    const role = await this.roleService.addPermissions(data.id, data.permissions);
+    const { users, ...result } = role;
+    return {
+      success: true,
+      data: result as Role,
+      error: null,
+    };
+  }
+
+  @MessagePattern('role.removePermissions')
+  async removePermissions(@Payload() data: { id: string; permissions: string[] }): Promise<BaseResponse<Role>> {
+    const role = await this.roleService.removePermissions(data.id, data.permissions);
+    const { users, ...result } = role;
+    return {
+      success: true,
+      data: result as Role,
+      error: null,
+    };
+  }
+
+  @MessagePattern('role.getUsersWithRole')
+  async getUsersWithRole(@Payload() roleId: string): Promise<BaseResponse<{
+    role: {
+      id: string;
+      name: string;
+      description: string;
+    },
+    users: Array<{
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      isActive: boolean;
+    }>
+  }>> {
+    const role = await this.roleService.getUsersWithRole(roleId);
+    return {
+      success: true,
+      data: {
+        role: {
+          id: role.id,
+          name: role.name,
+          description: role.description,
+        },
+        users: role.users.map(user => ({
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          isActive: user.isActive,
+        })),
       },
-      users: role.users.map(user => ({
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        isActive: user.isActive,
-      })),
+      error: null,
     };
   }
 }

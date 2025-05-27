@@ -47,6 +47,7 @@ export class AppConfigService {
     return {
       secret: this.configService.get<string>('jwt.secret'),
       expiresIn: this.configService.get<string>('jwt.expiresIn'),
+      expiresInRefresh: this.configService.get<string>('jwt.expiresInRefresh'),
     };
   }
 

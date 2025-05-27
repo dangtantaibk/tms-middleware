@@ -1,13 +1,14 @@
-import { Injectable, NotFoundException, ConflictException, Optional } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
-import { User } from './entities/user.entity';
-import { CreateUserDto, UpdateUserDto } from '@shared/dto/user.dto';
-import { CacheService } from '@infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@common/constants/cache.constants';
+import { CacheService } from '@infrastructure/cache/cache.service';
+import { Injectable } from '@nestjs/common';
+// import { RpcException } from '@nestjs/microservices';
+import { InjectRepository } from '@nestjs/typeorm';
+import { CreateUserDto, UpdateUserDto } from '@shared/dto/user.dto';
 import * as bcrypt from 'bcrypt';
-import { TcpClientService } from '@infrastructure/tcp/tcp.service';
-import { TCP_PATTERNS } from '@common/constants/cache.constants';
+import { In, Repository } from 'typeorm';
+import { User } from './entities/user.entity';
+import { createRpcException } from '@shared/utils/exception.utils';
+import { ERROR_CODES } from '@common/constants/error-codes.constants';
 
 @Injectable()
 export class UserService {
@@ -15,8 +16,7 @@ export class UserService {
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     private readonly cacheService: CacheService,
-    @Optional() private tcpClientService?: TcpClientService,
-  ) {}
+  ) { }
 
   async create(createUserDto: CreateUserDto): Promise<User> {
     // Check if user already exists
@@ -25,7 +25,11 @@ export class UserService {
     });
 
     if (existingUser) {
-      throw new ConflictException(`User with email '${createUserDto.email}' already exists`);
+      throw createRpcException(
+        ERROR_CODES.ALREADY_EXISTS,
+        `User with email '${createUserDto.email}' already exists`,
+        { email: existingUser.email }
+      );
     }
 
     // Hash the password
@@ -47,16 +51,16 @@ export class UserService {
 
     // Save user with relationships
     const savedUser = await this.usersRepository.save(user);
-    
+
     // Clear cache
     await this.clearUserCache();
-    
+
     return savedUser;
   }
 
   async findAll(): Promise<User[]> {
     const cacheKey = `${CACHE_KEYS.USER}all`;
-    
+
     // Try to get from cache first
     const cachedUsers = await this.cacheService.get<User[]>(cacheKey);
     if (cachedUsers) {
@@ -66,16 +70,16 @@ export class UserService {
     const users = await this.usersRepository.find({
       relations: ['roles']
     });
-    
+
     // Cache the result
     await this.cacheService.set(cacheKey, users);
-    
+
     return users;
   }
 
   async findById(id: string): Promise<User> {
     const cacheKey = `${CACHE_KEYS.USER}${id}`;
-    
+
     // Try to get from cache first
     const cachedUser = await this.cacheService.get<User>(cacheKey);
     if (cachedUser) {
@@ -86,20 +90,24 @@ export class UserService {
       where: { id },
       relations: ['roles']
     });
-    
+
     if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      throw createRpcException(
+        ERROR_CODES.NOT_FOUND,
+        `User with ID ${id} not found`,
+        { id }
+      );
     }
-    
+
     // Cache the result
     await this.cacheService.set(cacheKey, user);
-    
+
     return user;
   }
 
   async findByEmail(email: string): Promise<User> {
     const cacheKey = `${CACHE_KEYS.USER_BY_EMAIL}${email}`;
-    
+
     // Try to get from cache first
     const cachedUser = await this.cacheService.get<User>(cacheKey);
     if (cachedUser) {
@@ -110,14 +118,18 @@ export class UserService {
       where: { email },
       relations: ['roles']
     });
-    
+
     if (!user) {
-      throw new NotFoundException(`User with email ${email} not found`);
+      throw createRpcException(
+        ERROR_CODES.NOT_FOUND,
+        `User with email '${email}' not found`,
+        { email }
+      );
     }
-    
+
     // Cache the result
     await this.cacheService.set(cacheKey, user);
-    
+
     return user;
   }
 
@@ -128,7 +140,11 @@ export class UserService {
     });
 
     if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      throw createRpcException(
+        ERROR_CODES.NOT_FOUND,
+        `User with ID ${id} not found`,
+        { id }
+      );
     }
 
     // Check if email is being updated and if it conflicts
@@ -138,7 +154,11 @@ export class UserService {
       });
 
       if (existingUser) {
-        throw new ConflictException(`User with email '${updateUserDto.email}' already exists`);
+        throw createRpcException(
+          ERROR_CODES.ALREADY_EXISTS,
+          `User with email '${updateUserDto.email}' already exists`,
+          { email: existingUser.email }
+        );
       }
     }
 
@@ -146,7 +166,7 @@ export class UserService {
     if (updateUserDto.password) {
       updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
     }
-    
+
     // Handle basic properties (excluding roles)
     const { roleIds, ...userProperties } = updateUserDto;
 
@@ -160,21 +180,21 @@ export class UserService {
 
     // Save the updated user with relationships
     const updatedUser = await this.usersRepository.save(user);
-    
+
     // Clear cache
     await this.clearUserCache();
-    
+
     return updatedUser;
   }
 
   async remove(id: string): Promise<void> {
     const user = await this.findById(id);
-    
+
     // Check if user has critical roles that prevent deletion
-    const adminRoles = user.roles?.filter(role => 
+    const adminRoles = user.roles?.filter(role =>
       ['admin', 'super-admin'].includes(role.name.toLowerCase())
     );
-    
+
     if (adminRoles && adminRoles.length > 0) {
       // Check if this is the last admin user
       const adminCount = await this.usersRepository
@@ -183,12 +203,16 @@ export class UserService {
         .where('role.name IN (:...roleNames)', { roleNames: ['admin', 'super-admin'] })
         .andWhere('user.id != :userId', { userId: id })
         .getCount();
-      
+
       if (adminCount === 0) {
-        throw new ConflictException('Cannot delete the last admin user');
+        throw createRpcException(
+          ERROR_CODES.CANNOT_DELETE_LAST_ADMIN,
+          'Cannot delete the last admin user',
+          { userId: id }
+        );
       }
     }
-    
+
     await this.usersRepository.delete(id);
     await this.clearUserCache();
   }
@@ -200,7 +224,7 @@ export class UserService {
    */
   async getUserPermissions(userId: string): Promise<string[]> {
     const cacheKey = `${CACHE_KEYS.USER}${userId}:permissions`;
-    
+
     // Try to get from cache first
     const cachedPermissions = await this.cacheService.get<string[]>(cacheKey);
     if (cachedPermissions) {
@@ -230,10 +254,10 @@ export class UserService {
     }
 
     const permissionsArray = Array.from(permissions);
-    
+
     // Cache the result
     await this.cacheService.set(cacheKey, permissionsArray);
-    
+
     return permissionsArray;
   }
 
@@ -246,7 +270,7 @@ export class UserService {
         where: { email },
         relations: ['roles']
       });
-      
+
       if (!user || !user.isActive) {
         return null;
       }
@@ -256,7 +280,7 @@ export class UserService {
       }
 
       const isMatch = await bcrypt.compare(password, user.password);
-      
+
       if (isMatch) {
         return user;
       }
@@ -276,21 +300,29 @@ export class UserService {
     });
 
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw createRpcException(
+        ERROR_CODES.NOT_FOUND,
+        `User with ID ${userId} not found`,
+        { userId }
+      );
     }
 
     // Verify old password
     const isMatch = await bcrypt.compare(oldPassword, user.password);
     if (!isMatch) {
-      throw new ConflictException('Current password is incorrect');
+      throw createRpcException(
+        ERROR_CODES.INVALID_CREDENTIALS,
+        'Current password is incorrect',
+        { userId }
+      );
     }
 
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    
+
     // Update password
     await this.usersRepository.update(userId, { password: hashedPassword });
-    
+
     // Clear cache
     await this.clearUserCache();
   }
@@ -300,13 +332,13 @@ export class UserService {
    */
   async toggleUserStatus(userId: string, isActive: boolean): Promise<User> {
     const user = await this.findById(userId);
-    
+
     user.isActive = isActive;
     const updatedUser = await this.usersRepository.save(user);
-    
+
     // Clear cache
     await this.clearUserCache();
-    
+
     return updatedUser;
   }
 
@@ -315,7 +347,7 @@ export class UserService {
    */
   async getUsersByRole(roleName: string): Promise<User[]> {
     const cacheKey = `${CACHE_KEYS.USER}role:${roleName}`;
-    
+
     // Try to get from cache first
     const cachedUsers = await this.cacheService.get<User[]>(cacheKey);
     if (cachedUsers) {
@@ -328,10 +360,10 @@ export class UserService {
       .where('role.name = :roleName', { roleName })
       .andWhere('user.isActive = :isActive', { isActive: true })
       .getMany();
-    
+
     // Cache the result
     await this.cacheService.set(cacheKey, users);
-    
+
     return users;
   }
 
@@ -346,7 +378,11 @@ export class UserService {
     if (roles.length !== roleIds.length) {
       const foundIds = roles.map(role => role.id);
       const missingIds = roleIds.filter(id => !foundIds.includes(id));
-      throw new NotFoundException(`Roles not found: ${missingIds.join(', ')}`);
+      throw createRpcException(
+        ERROR_CODES.ROLES_NOT_FOUND,
+        `Roles not found: ${missingIds.join(', ')}`,
+        { missingIds }
+      );
     }
 
     return roles;

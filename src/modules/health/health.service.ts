@@ -1,11 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { HttpClientService } from '@infrastructure/http/http-client.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cache } from 'cache-manager';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from '../user/entities/user.entity';
+import { DetailedHealthResult } from './health.controller';
 
 @Injectable()
 export class HealthService {
@@ -23,13 +20,13 @@ export class HealthService {
     };
   }
 
-  async getDetailedHealth() {
+  async getDetailedHealth() : Promise<DetailedHealthResult> {
     const result = {
       status: 'ok',
       timestamp: new Date().toISOString(),
       services: {
         database: await this.checkDatabase(),
-        cache: await this.checkCache(),
+        redis: await this.checkCache(),
         tmsBackend: await this.checkTmsBackend(),
       },
     };

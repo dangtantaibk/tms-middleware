@@ -1,13 +1,14 @@
-import { Injectable, UnauthorizedException, NotFoundException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { CACHE_KEYS } from '@common/constants/cache.constants';
+import { ERROR_CODES } from '@common/constants/error-codes.constants';
 import { AppConfigService } from '@config/config.service';
 import { UserService } from '@modules/user/user.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject } from '@nestjs/common';
-import { Cache } from 'cache-manager';
-import { CACHE_KEYS } from '@common/constants/cache.constants';
+import { Inject, Injectable } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { createRpcException } from '@shared/utils/exception.utils';
 import * as bcrypt from 'bcrypt';
-import { LoginDto, RefreshTokenDto } from '@shared/dto/auth.dto';
+import { Cache } from 'cache-manager';
+import { AuthResponse, UserProfileResponse } from './auth.controller';
 
 @Injectable()
 export class AuthService {
@@ -16,13 +17,13 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: AppConfigService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
-  ) {}
+  ) { }
 
   async validateUser(email: string, password: string): Promise<any> {
     try {
       // Check if the user exists
       const user = await this.userService.findByEmail(email);
-      
+
       if (!user) {
         return null;
       }
@@ -50,16 +51,16 @@ export class AuthService {
     }
   }
 
-  async login(user: any) {
-    const payload = { 
-      email: user.email, 
-      sub: user.id, 
+  async login(user: any): Promise<AuthResponse> {
+    const payload = {
+      email: user.email,
+      sub: user.id,
       roles: user.roles?.map(role => role.name) || [],
       permissions: await this.getUserPermissions(user.id)
     };
 
     const jwtConfig = this.configService.jwtConfig;
-    
+
     const accessToken = this.jwtService.sign(payload, {
       secret: jwtConfig.secret,
       expiresIn: jwtConfig.expiresIn,
@@ -67,7 +68,7 @@ export class AuthService {
 
     const refreshToken = this.jwtService.sign(payload, {
       secret: jwtConfig.secret,
-      expiresIn: '7d', // 7 days for refresh token
+      expiresIn: jwtConfig.expiresInRefresh,
     });
 
     // Cache the access token
@@ -77,6 +78,7 @@ export class AuthService {
     return {
       access_token: accessToken,
       refresh_token: refreshToken,
+      expires_in: this.convertExpiryToSeconds(jwtConfig.expiresIn),
       user: {
         id: user.id,
         email: user.email,
@@ -91,29 +93,33 @@ export class AuthService {
     };
   }
 
-  async refreshToken(refreshTokenParam: string) {
+  async refreshToken(refreshTokenParam: string): Promise<AuthResponse> {
     try {
       // Verify the refresh token
       const payload = this.jwtService.verify(refreshTokenParam, {
         secret: this.configService.jwtConfig.secret
       });
-      
+
       // Get user from the database using payload information
       const user = await this.userService.findById(payload.sub);
-      
+
       if (!user || !user.isActive) {
-        throw new UnauthorizedException('User not found or inactive');
+        throw createRpcException(
+          ERROR_CODES.UNAUTHORIZED,
+          'User not found or inactive',
+          { userId: payload.sub }
+        );
       }
-      
-      const newPayload = { 
-        email: user.email, 
-        sub: user.id, 
+
+      const newPayload = {
+        email: user.email,
+        sub: user.id,
         roles: user.roles?.map(role => role.name) || [],
         permissions: await this.getUserPermissions(user.id)
       };
 
       const jwtConfig = this.configService.jwtConfig;
-      
+
       const accessToken = this.jwtService.sign(newPayload, {
         secret: jwtConfig.secret,
         expiresIn: jwtConfig.expiresIn,
@@ -121,30 +127,31 @@ export class AuthService {
 
       const refreshToken = this.jwtService.sign(newPayload, {
         secret: jwtConfig.secret,
-        expiresIn: '7d',
+        expiresIn: jwtConfig.expiresInRefresh,
       });
 
       // Cache the new access token
       const tokenCacheKey = `${CACHE_KEYS.AUTH_TOKEN}${accessToken}`;
       await this.cacheManager.set(tokenCacheKey, newPayload, 24 * 60 * 60);
-      
-      return { 
+
+      return {
         access_token: accessToken,
         refresh_token: refreshToken,
+        expires_in: this.convertExpiryToSeconds(jwtConfig.expiresIn),
         user: {
           id: user.id,
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
-          roles: user.roles?.map(role => ({
-            id: role.id,
-            name: role.name,
-            description: role.description,
-          })) || [],
+          roles: user.roles?.map(role => role.name) || [],
         },
       };
     } catch (error) {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw createRpcException(
+        ERROR_CODES.UNAUTHORIZED,
+        'Invalid refresh token',
+        { originalError: error.message, refreshToken: refreshTokenParam }
+      );
     }
   }
 
@@ -153,32 +160,80 @@ export class AuthService {
       // Remove token from cache
       const tokenCacheKey = `${CACHE_KEYS.AUTH_TOKEN}${token}`;
       await this.cacheManager.del(tokenCacheKey);
-      
+
       return { message: 'Logged out successfully' };
     } catch (error) {
-      throw new UnauthorizedException('Invalid token');
+      throw createRpcException(
+        ERROR_CODES.INTERNAL_SERVER_ERROR,
+        'Error during logout',
+        { originalError: error.message, token }
+      );
     }
   }
 
-  async getProfile(userId: string) {
-    const user = await this.userService.findById(userId);
-    
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+  async getProfile(userId: string): Promise<UserProfileResponse> {
+    try {
+      const user = await this.userService.findById(userId);
 
-    const { password, ...userProfile } = user;
-    return {
-      ...userProfile,
-      permissions: await this.getUserPermissions(userId),
-    };
+      if (!user) {
+        throw createRpcException(
+          ERROR_CODES.NOT_FOUND,
+          `User with ID ${userId} not found`,
+          { userId }
+        );
+      }
+
+      const { password, ...userProfile } = user;
+
+      // Transform roles to the expected format if needed
+      const transformedRoles = user.roles?.map(role => ({
+        id: role.id,
+        name: role.name,
+        description: role.description,
+      })) || [];
+
+      return {
+        ...userProfile,
+        roles: transformedRoles,
+        permissions: await this.getUserPermissions(userId),
+      };
+    } catch (error) {
+      // Re-throw if it's already an RpcException
+      if (error.name === 'RpcException') {
+        throw error;
+      }
+
+      // Otherwise, create a new RpcException
+      throw createRpcException(
+        ERROR_CODES.INTERNAL_SERVER_ERROR,
+        'Error fetching user profile',
+        { userId, originalError: error.message }
+      );
+    }
   }
 
   private async getUserPermissions(userId: string): Promise<string[]> {
     try {
       return await this.userService.getUserPermissions(userId);
     } catch (error) {
+      // Just return empty array on error as before
       return [];
+    }
+  }
+
+  private convertExpiryToSeconds(expiry: string): number {
+    const match = expiry.match(/^(\d+)([smhd])$/);
+    if (!match) return 3600; // Default to 1 hour
+
+    const value = parseInt(match[1], 10);
+    const unit = match[2];
+
+    switch (unit) {
+      case 's': return value;
+      case 'm': return value * 60;
+      case 'h': return value * 60 * 60;
+      case 'd': return value * 24 * 60 * 60;
+      default: return 3600;
     }
   }
 }

@@ -6,11 +6,12 @@ import { AuthModule } from './modules/auth/auth.module';
 import { OrderModule } from './modules/order/order.module';
 import { RoleModule } from './modules/role/role.module';
 import { HealthModule } from './modules/health/health.module';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
 import { RolesGuard } from './shared/guards/roles.guard';
 import { LoggingInterceptor } from './shared/interceptors/logging.interceptor';
 import { ErrorInterceptor } from './shared/interceptors/error.interceptor';
+import { TcpExceptionFilter } from '@shared/filters/tcp-exceptions.filter';
 
 @Module({
   imports: [
@@ -38,6 +39,10 @@ import { ErrorInterceptor } from './shared/interceptors/error.interceptor';
     {
       provide: APP_INTERCEPTOR,
       useClass: ErrorInterceptor,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: TcpExceptionFilter,
     },
   ],
 })

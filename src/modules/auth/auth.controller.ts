@@ -1,107 +1,145 @@
-import { 
-  Controller, 
-  Post, 
-  Body, 
-  UseGuards, 
-  Get, 
-  UnauthorizedException, 
-  Logger,
-  Req,
-  UseInterceptors 
-} from '@nestjs/common';
+import { Controller, UseFilters, UseInterceptors } from '@nestjs/common';
+import { MessagePattern, Payload } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
-import { LoginDto, RefreshTokenDto, AuthResponseDto, LogoutResponseDto, ProfileResponseDto } from '@shared/dto/auth.dto';
-import { JwtAuthGuard } from '@shared/guards/jwt-auth.guard';
-import { CurrentUser } from '@shared/decorators/current-user.decorator';
-import { Public } from '@shared/decorators/auth.decorator';
+import { LoginDto, RefreshTokenDto } from '@shared/dto/auth.dto';
 import { LoggingInterceptor } from '@shared/interceptors/logging.interceptor';
-import { Request } from 'express';
+import { TcpExceptionFilter } from '@shared/filters/tcp-exceptions.filter';
+import { BaseResponse } from '@shared/interfaces/response.interface';
+import { createRpcException } from '@shared/utils/exception.utils';
+import { ERROR_CODES } from '@common/constants/error-codes.constants';
+import { User } from '../user/entities/user.entity';
 
-@Controller('auth')
+export interface AuthResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    roles: string[];
+  };
+}
+
+export interface LogoutResponse {
+  message: string;
+}
+
+export interface UserProfileResponse {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  roles: {
+    id: string;
+    name: string;
+    description: string;
+  }[];
+  permissions: string[];
+}
+
+@Controller()
 @UseInterceptors(LoggingInterceptor)
-export class AuthController {
-  private readonly logger = new Logger(AuthController.name);
-
+@UseFilters(TcpExceptionFilter)
+export class AuthTcpController {
   constructor(private readonly authService: AuthService) {}
 
-  @Public()
-  @Post('login')
-  async login(@Body() loginDto: LoginDto): Promise<AuthResponseDto> {
-    this.logger.log(`Login attempt for email: ${loginDto.email}`);
-    
+  @MessagePattern('auth.login')
+  async login(@Payload() loginDto: LoginDto): Promise<BaseResponse<AuthResponse>> {
     const { email, password } = loginDto;
     
-    if (!email || !password) {
-      throw new UnauthorizedException('Email and password are required');
-    }
-
     const user = await this.authService.validateUser(email, password);
     
     if (!user) {
-      this.logger.warn(`Failed login attempt for email: ${email}`);
-      throw new UnauthorizedException('Invalid credentials');
+      throw createRpcException(
+        ERROR_CODES.INVALID_CREDENTIALS,
+        'Invalid credentials',
+        { email }
+      );
     }
 
     const result = await this.authService.login(user);
-    this.logger.log(`Successful login for email: ${email}`);
-    
-    return result;
-  }
-
-  @Public()
-  @Post('refresh')
-  async refreshToken(@Body() refreshTokenDto: RefreshTokenDto): Promise<AuthResponseDto> {
-    this.logger.log('Token refresh attempt');
-    
-    try {
-      const response = await this.authService.refreshToken(refreshTokenDto.refresh_token);
-      this.logger.log('Token refresh successful');
-      return response;
-    } catch (error) {
-      this.logger.warn(`Token refresh failed: ${error.message}`);
-      throw new UnauthorizedException('Invalid or expired refresh token');
-    }
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Post('logout')
-  async logout(@Req() request: Request): Promise<LogoutResponseDto> {
-    const token = this.extractTokenFromHeader(request);
-    
-    if (!token) {
-      throw new UnauthorizedException('No token provided');
-    }
-
-    this.logger.log('Logout attempt');
-    const result = await this.authService.logout(token);
-    this.logger.log('Logout successful');
-    
-    return result;
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('profile')
-  async getProfile(@CurrentUser() user: any): Promise<ProfileResponseDto> {
-    this.logger.log(`Profile request for user: ${user.email}`);
-    return await this.authService.getProfile(user.sub);
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @Get('validate')
-  async validateToken(@CurrentUser() user: any): Promise<{ valid: boolean; user: any }> {
     return {
-      valid: true,
-      user: {
-        id: user.sub,
-        email: user.email,
-        roles: user.roles,
-        permissions: user.permissions,
-      },
+      success: true,
+      data: result,
+      error: null,
     };
   }
 
-  private extractTokenFromHeader(request: Request): string | undefined {
-    const [type, token] = request.headers.authorization?.split(' ') ?? [];
-    return type === 'Bearer' ? token : undefined;
+  @MessagePattern('auth.refresh')
+  async refreshToken(@Payload() refreshTokenDto: RefreshTokenDto): Promise<BaseResponse<AuthResponse>> {
+    try {
+      const response = await this.authService.refreshToken(refreshTokenDto.refresh_token);
+      return {
+        success: true,
+        data: response,
+        error: null,
+      };
+    } catch (error) {
+      throw createRpcException(
+        ERROR_CODES.UNAUTHORIZED,
+        'Invalid or expired refresh token',
+        { originalError: error.message }
+      );
+    }
+  }
+
+  @MessagePattern('auth.validateUser')
+  async validateUser(@Payload() data: { email: string; password: string }): Promise<BaseResponse<User>> {
+    const user = await this.authService.validateUser(data.email, data.password);
+    
+    if (!user) {
+      throw createRpcException(
+        ERROR_CODES.INVALID_CREDENTIALS,
+        'Invalid credentials',
+        { email: data.email }
+      );
+    }
+
+    return {
+      success: true,
+      data: user,
+      error: null,
+    };
+  }
+
+  @MessagePattern('auth.getProfile')
+  async getProfile(@Payload() userId: string): Promise<BaseResponse<UserProfileResponse>> {
+    try {
+      const profile = await this.authService.getProfile(userId);
+      return {
+        success: true,
+        data: profile,
+        error: null,
+      };
+    } catch (error) {
+      throw createRpcException(
+        ERROR_CODES.NOT_FOUND,
+        'User profile not found',
+        { userId, originalError: error.message }
+      );
+    }
+  }
+
+  @MessagePattern('auth.logout')
+  async logout(@Payload() token: string): Promise<BaseResponse<LogoutResponse>> {
+    try {
+      await this.authService.logout(token);
+      return {
+        success: true,
+        data: { message: 'Logged out successfully' },
+        error: null,
+      };
+    } catch (error) {
+      throw createRpcException(
+        ERROR_CODES.BAD_REQUEST,
+        'Invalid token',
+        { originalError: error.message }
+      );
+    }
   }
 }
